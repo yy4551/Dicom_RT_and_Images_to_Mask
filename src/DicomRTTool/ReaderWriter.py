@@ -2,9 +2,9 @@ __author__ = 'Brian M Anderson'
 
 # Created on 12/31/2020
 import os
-from .Services.DicomBases import ImageBase, RDBase, RTBase, PlanBase, PyDicomKeys, SitkDicomKeys
-from .Services.StaticScripts import poly2mask, add_to_mask
-from .Viewer import plot_scroll_Image
+from Services.DicomBases import ImageBase, RDBase, RTBase, PlanBase, PyDicomKeys, SitkDicomKeys
+from Services.StaticScripts import poly2mask, add_to_mask
+from Viewer import plot_scroll_Image
 from tqdm import tqdm
 import typing
 import pydicom
