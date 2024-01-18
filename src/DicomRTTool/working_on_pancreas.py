@@ -3,6 +3,7 @@ from ReaderWriter import DicomReaderWriter
 import SimpleITK as sitk
 import os
 from log import logger
+import numpy as np
 
 
 def create_path(path):
@@ -12,36 +13,63 @@ def create_path(path):
     return path
 
 Dicom_path = r'C:\Git\DataSet\Pancreas\None-Enhanced-156 Patients-169 CT'
-example_path = r'C:\Git\DataSet\Pancreas\volume'
-label_path = r'C:\Git\DataSet\Pancreas\segmentation'
+img_path = r'C:\Git\DataSet\Pancreas\volume'
+seg_path = r'C:\Git\DataSet\Pancreas\segmentation'
 
-create_path(example_path)
-create_path(label_path)
+# create_path(img_path)
+# create_path(seg_path)
 
 
+who_has_tiny_pancreas = []
+no_pancreas = []
+no_tumor = []
+no_ctv = []
 
 for index,dcmfolder in enumerate(os.listdir(Dicom_path)):
-
-    Dicom_reader = DicomReaderWriter(description='Examples', arg_max=True)
+    Dicom_reader = DicomReaderWriter(description='Examples', arg_max=False)
     fullpath = os.path.join(Dicom_path, dcmfolder)
     Dicom_reader.walk_through_folders(fullpath) # This will parse through all DICOM present in the folder and subfolders
-    all_rois = Dicom_reader.return_rois(print_rois=True) # Return a list of all rois present
+    all_rois = Dicom_reader.return_rois(print_rois=True)
+    if 'pancreas' not in all_rois:
+        no_pancreas.append(index)
+    if 'tumor' not in all_rois:
+        no_tumor.append(index)
+    if 'ctv' not in all_rois:
+        no_ctv.append(index)
+        # Return a list of all rois present
 
-    Contour_names = all_rois # Define what rois you want
+    Contour_names = ['tumor', 'ctv', 'pancreas'] # Define what rois you want
 # associations = [ROIAssociationClass('tumor', ['tumor_mr', 'tumor_ct'])] # Any list of roi associations
     Dicom_reader.set_contour_names_and_associations(contour_names=Contour_names)
 
-
     Dicom_reader.get_images_and_mask()
 
-    image_numpy = Dicom_reader.ArrayDicom
-    mask_numpy = Dicom_reader.mask
+    print(f"SHAPE OF {index} th img = {Dicom_reader.ArrayDicom.shape}")
+    print(f"SHAPE OF {index} th seg = {Dicom_reader.mask.shape}")
 
-    dicom_sitk_handle = Dicom_reader.dicom_handle # SimpleITK image handle
-    mask_sitk_handle = Dicom_reader.annotation_handle
 
-    padded_index = str(index + 1).zfill(3)
+    tumor_size = np.count_nonzero(Dicom_reader.mask[0])
+    ctv_size = np.count_nonzero(Dicom_reader.mask[1])
+    pancreas_size = np.count_nonzero(Dicom_reader.mask[2])
+
+    print(f"tumor_size = {tumor_size},ctv_size = {ctv_size},pancreas_size = {pancreas_size}")
+
+    if tumor_size > pancreas_size or ctv_size > pancreas_size:
+        who_has_tiny_pancreas.append(index)
+
+    padded_index = str(index).zfill(3)
+
     logger.info(
-        f'{dcmfolder.ljust(20)} = {padded_index.ljust(4)},depth={str(image_numpy.shape[0]).ljust(5)},  label = {str(Dicom_reader.all_rois).ljust(25)}, ')
-    sitk.WriteImage(dicom_sitk_handle, os.path.join(example_path, f'volume_{padded_index}.nii.gz'))
-    sitk.WriteImage(mask_sitk_handle, os.path.join(label_path, f'segmentation_{padded_index}.nii.gz'))
+        f'{index} : SHAPE OF {index} th img = {Dicom_reader.ArrayDicom},SHAPE OF {index} th seg = {Dicom_reader.mask}')
+
+    sitk.WriteImage(Dicom_reader.dicom_handle, os.path.join(img_path, f'img_{padded_index}.nii.gz'))
+    sitk.WriteImage(Dicom_reader.annotation_handle, os.path.join(seg_path, f'seg_{padded_index}.nii.gz'))
+
+print(f"who_has_tiny_pancreas={who_has_tiny_pancreas}")
+print(f"no_pancreas = {no_pancreas}")
+print(f"mo_tumor = {no_tumor}")
+print(f"no_ctv = {no_ctv}")
+
+logger.info(f"no_pancreas = {no_pancreas}")
+logger.info(f"mo_tumor = {no_tumor}")
+logger.info(f"no_ctv = {no_ctv}")

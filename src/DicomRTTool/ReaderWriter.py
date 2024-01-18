@@ -2,6 +2,9 @@ __author__ = 'Brian M Anderson'
 
 # Created on 12/31/2020
 import os
+
+from numpy import sort
+
 from Services.DicomBases import ImageBase, RDBase, RTBase, PlanBase, PyDicomKeys, SitkDicomKeys
 from Services.StaticScripts import poly2mask, add_to_mask
 from Viewer import plot_scroll_Image
@@ -18,7 +21,7 @@ from queue import *
 import pandas as pd
 import copy
 from typing import List, Dict
-
+from log import logger
 
 def contour_worker(A):
     q, kwargs = A
@@ -279,7 +282,7 @@ class DicomReaderWriter(object):
     group_dose_by_frame_of_reference: bool
 
     def __init__(self, description='', Contour_Names: List[str]=None, associations: List[ROIAssociationClass] = None,
-                 arg_max=True, verbose=True, create_new_RT=True, template_dir=None, delete_previous_rois=True,
+                 arg_max=False, verbose=True, create_new_RT=True, template_dir=None, delete_previous_rois=True,
                  require_all_contours=True, iteration=0, get_dose_output=False,
                  flip_axes=(False, False, False), index=0, series_instances_dictionary: Dict[int, ImageBase] = None,
                  plan_pydicom_string_keys: PyDicomKeys = None,
@@ -361,12 +364,14 @@ class DicomReaderWriter(object):
         self.reader.LoadPrivateTagsOn()
         self.reader.SetOutputPixelType(sitk.sitkFloat32)
 
+
     def set_index(self, index: int):
         self.index = index
         if self.index in self.rois_in_index_dict:
             self.rois_in_loaded_index = self.rois_in_index_dict[self.index]
         else:
             self.rois_in_loaded_index = []
+        logger.debug("set_index")
 
     def __mask_empty_mask__(self) -> None:
         if self.dicom_handle:
@@ -596,6 +601,7 @@ class DicomReaderWriter(object):
             if self.verbose:
                 print("Contour names or associations changed, resetting mask")
             self.__reset_mask__()
+        logger.debug("set_contour_names_and_associations")
 
     def __set_associations__(self, associations: List[ROIAssociationClass] = None):
         if associations is not None:
@@ -675,6 +681,7 @@ class DicomReaderWriter(object):
             print('The following ROIs were found')
             for roi in self.all_rois:
                 print(roi)
+        logger.debug("return_rois")
         return self.all_rois
 
     def return_found_rois_with_same_code(self, print_rois=True) -> Dict[str, List[str]]:
@@ -684,6 +691,7 @@ class DicomReaderWriter(object):
                 print(f"For code {code} we found:")
                 for roi in self.roi_groups[code]:
                     print(roi)
+        logger.debug("return_found_rois_with_same_code")
         return self.roi_groups
 
     def return_files_from_UID(self, UID: str) -> List[str]:
@@ -709,6 +717,8 @@ class DicomReaderWriter(object):
             out_file_paths += [image_dictionary.RTs[structure_key].path]
         for structure_key in image_dictionary.RDs:
             out_file_paths += [image_dictionary.RDs[structure_key].path]
+
+        logger.debug("return_files_from_UID")
         return out_file_paths
 
     def return_files_from_index(self, index: int) -> List[str]:
@@ -734,6 +744,7 @@ class DicomReaderWriter(object):
             out_file_paths += [image_dictionary.RPs[structure_key].path]
         for structure_key in image_dictionary.RDs:
             out_file_paths += [image_dictionary.RDs[structure_key].path]
+        logger.debug("return files from index")
         return out_file_paths
 
     def return_files_from_patientID(self, patientID: str) -> List[str]:
@@ -748,6 +759,7 @@ class DicomReaderWriter(object):
         for index in self.series_instances_dictionary:
             if self.series_instances_dictionary[index].PatientID == patientID:
                 out_file_paths += self.return_files_from_index(index)
+        logger.debug("return files from patient ID")
         return out_file_paths
 
     def where_are_RTs(self, ROIName: str) -> List[str]:
@@ -775,6 +787,7 @@ class DicomReaderWriter(object):
         else:
             print('You need to first define what ROIs you want, please use'
                   ' .set_contour_names_and_associations()')
+        logger.debug("which_indexes_have_all_rois")
 
     def characterize_data_to_excel(self, wanted_rois: List[str] = None,
                                    excel_path: typing.Union[str, bytes, os.PathLike] = "./Data.xlsx"):
@@ -890,6 +903,8 @@ class DicomReaderWriter(object):
             print('You need to first define what ROIs you want, please use'
                   ' .set_contour_names_and_associations(roi_list)')
 
+        logger.debug("which_indexes_lack_all_rois")
+
     def down_folder(self, input_path: typing.Union[str, bytes, os.PathLike]):
         print('Please move from down_folder() to walk_through_folders()')
         self.walk_through_folders(input_path=input_path)
@@ -935,6 +950,7 @@ class DicomReaderWriter(object):
                   'set_index(index)'.format(len(self.series_instances_dictionary)))
             self.set_index(0)
         self.__check_if_all_contours_present__()
+        logger.debug("walk through")
         return None
 
     def write_parallel(self, out_path: typing.Union[str, bytes, os.PathLike],
@@ -1046,6 +1062,7 @@ class DicomReaderWriter(object):
                     df.loc[df.Iteration == iteration, column_name] = \
                         self.series_instances_dictionary[index].additional_tags['Volumes'][roi_index]
             df.to_excel(excel_file, index=False)
+        logger.debug("write_parallel")
 
     def get_images_and_mask(self) -> None:
         if self.index not in self.series_instances_dictionary:
@@ -1055,6 +1072,7 @@ class DicomReaderWriter(object):
         self.get_mask()
         if self.get_dose_output:
             self.get_dose()
+        logger.debug("get imagers and mask")
 
     def get_all_info(self) -> None:
         """
@@ -1119,6 +1137,7 @@ class DicomReaderWriter(object):
             self.ArrayDicom = sitk.GetArrayFromImage(self.dicom_handle)
             self.image_size_cols, self.image_size_rows, self.image_size_z = self.dicom_handle.GetSize()
             self.dicom_handle_uid = series_instance_uid
+        logger.debug("get_images")
 
     def get_dose(self) -> None:
         if self.index not in self.series_instances_dictionary:
@@ -1192,6 +1211,7 @@ class DicomReaderWriter(object):
         RTs = self.series_instances_dictionary[index].RTs
         for RT_key in RTs:
             RT = RTs[RT_key]
+
             for ROI_Name in RT.ROIs_In_Structure.keys():
                 true_name = None
                 if ROI_Name.lower() in self.Contour_Names:
@@ -1204,6 +1224,73 @@ class DicomReaderWriter(object):
                                 break  # Found the name we wanted
                 if true_name and true_name in self.Contour_Names:
                     mask = self.__return_mask_for_roi__(RT, ROI_Name)
+                    self.mask[..., self.Contour_Names.index(true_name)] += mask
+                    # self.mask[self.mask > 1] = 1
+        for true_name in self.Contour_Names:
+            mask_img = sitk.GetImageFromArray(self.mask[..., self.Contour_Names.index(true_name)].astype(np.uint8))
+            mask_img.SetSpacing(self.dicom_handle.GetSpacing())
+            mask_img.SetDirection(self.dicom_handle.GetDirection())
+            mask_img.SetOrigin(self.dicom_handle.GetOrigin())
+            self.mask_dictionary[true_name] = mask_img
+
+        if self.flip_axes[0]:
+            self.mask = self.mask[:, :, ::-1, ...]
+        if self.flip_axes[1]:
+            self.mask = self.mask[:, ::-1, ...]
+        if self.flip_axes[2]:
+            self.mask = self.mask[::-1, ...]
+        voxel_size = np.prod(self.dicom_handle.GetSpacing())/1000  # volume in cc per voxel
+        volumes = np.sum(self.mask[..., 1:], axis=(0, 1, 2)) * voxel_size  # Volume in cc
+        self.series_instances_dictionary[index].additional_tags['Volumes'] = volumes
+        if self.arg_max:
+            self.mask = np.argmax(self.mask, axis=-1)
+        else:
+            self.mask = self.mask[..., :3]
+            self.mask = np.transpose(self.mask,(3,0,1,2))
+        self.annotation_handle = sitk.GetImageFromArray(self.mask.astype(np.int8))
+        self.annotation_handle.SetSpacing(self.dicom_handle.GetSpacing())
+        self.annotation_handle.SetOrigin(self.dicom_handle.GetOrigin())
+        self.annotation_handle.SetDirection(self.dicom_handle.GetDirection())
+        pass
+        logger.debug(("get maSK"))
+        return None
+
+
+
+    def get_mask_yy(self) -> None:
+        if self.index not in self.series_instances_dictionary:
+            print('Index is not present in the dictionary! Set it using set_index(index)')
+            return None
+        if not self.Contour_Names:
+            print('If you want a mask, you need to set the contour names you are looking for, use '
+                  'set_contour_names_and_associations(list_of_roi_names).\nIf you just '
+                  'want to look at images  use get_images() not get_images_and_mask() or get_mask()')
+            return None
+        index = self.index
+        if self.dicom_handle_uid != self.series_instances_dictionary[index].SeriesInstanceUID:
+            print('Loading images for index {}, since mask was requested but image loading was '
+                  'previously different\n'.format(index))
+            self.get_images()
+        RTs = self.series_instances_dictionary[index].RTs
+        for RT_key in RTs:
+            RT = RTs[RT_key]
+            mask_list = []
+            roi_name_sorted = sort(RT.ROIs_In_Structure.keys())
+            for ROI_Name in roi_name_sorted:
+                true_name = None
+                if ROI_Name.lower() in self.Contour_Names:
+                    true_name = ROI_Name.lower()
+                else:
+                    if self.associations:
+                        for association in self.associations:
+                            if ROI_Name.lower() in association.other_names:
+                                true_name = association.roi_name
+                                break  # Found the name we wanted
+                if true_name and true_name in self.Contour_Names:
+                    mask = self.__return_mask_for_roi__(RT, ROI_Name)
+
+                    mask_list.append(mask)
+
                     self.mask[..., self.Contour_Names.index(true_name) + 1] += mask
                     self.mask[self.mask > 1] = 1
         for true_name in self.Contour_Names:
@@ -1227,7 +1314,9 @@ class DicomReaderWriter(object):
         self.annotation_handle.SetSpacing(self.dicom_handle.GetSpacing())
         self.annotation_handle.SetOrigin(self.dicom_handle.GetOrigin())
         self.annotation_handle.SetDirection(self.dicom_handle.GetDirection())
+
         return None
+
 
     def reshape_contour_data(self, as_array: np.array):
         as_array = np.asarray(as_array)
@@ -1235,6 +1324,8 @@ class DicomReaderWriter(object):
             as_array = np.reshape(as_array, [as_array.shape[0] // 3, 3])
         matrix_points = np.asarray([self.dicom_handle.TransformPhysicalPointToIndex(as_array[i])
                                     for i in range(as_array.shape[0])])
+
+        logger.debug("reshape_contour_data")
         return matrix_points
 
     def return_mask(self, mask: np.array, matrix_points: np.array, geometric_type: str):
@@ -1285,6 +1376,8 @@ class DicomReaderWriter(object):
                         r_value = r_start + r_slope * (c_value - c_start)
                         z_value = z_start + z_slope * (c_value - c_start)
                         add_to_mask(mask=mask, z_value=z_value, r_value=r_value, c_value=c_value)
+        logger.debug("return mask")
+
         return mask
 
     def contour_points_to_mask(self, contour_points, mask=None):
@@ -1292,6 +1385,7 @@ class DicomReaderWriter(object):
             mask = np.zeros([self.dicom_handle.GetSize()[-1], self.image_size_rows, self.image_size_cols], dtype=np.int8)
         matrix_points = self.reshape_contour_data(contour_points)
         mask = self.return_mask(mask, matrix_points, geometric_type="CLOSED_PLANAR")
+        logger.debug("contour_points_to_mask")
         return mask
 
     def contours_to_mask(self, index: int, true_name: str):
@@ -1308,6 +1402,8 @@ class DicomReaderWriter(object):
                 print(f"This structure set had no data present for {true_name}! Returning a blank mask")
         else:
             print("This structure set had no data present! Returning a blank mask")
+
+        logger.debug("contours_to_mask")
         return mask
 
     def use_template(self) -> None:
@@ -1343,6 +1439,7 @@ class DicomReaderWriter(object):
         fid = open(os.path.join(self.series_instances_dictionary[self.index].path,
                                 '{}_Iteration_{}.txt'.format(self.desciption, self.iteration)), 'w+')
         fid.close()
+        logger.debug("write_images_annotations")
 
     def prediction_array_to_RT(self, prediction_array: np.array, output_dir: typing.Union[str, bytes, os.PathLike],
                                ROI_Names: List[str], ROI_Types: List[str] = None) -> None:
